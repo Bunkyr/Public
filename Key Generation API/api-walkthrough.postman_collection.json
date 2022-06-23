@@ -1,0 +1,335 @@
+{
+	"info": {
+		"_postman_id": "3275f66d-ce88-4d9a-878e-af363bd74bb3",
+		"name": "Bunkyr Key Generation API",
+		"description": "The Bunkyr Key Generation API can be used for generation of keys and recovery of existing keys.\n\nContact Support:\n Email: contact@bunkyr.com",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Generate key",
+			"item": [
+				{
+					"name": "Initialize a new key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"pm.collectionVariables.set(\"keyId\", jsonData.id);",
+									"pm.collectionVariables.set(\"clientSecret\", jsonData.clientSecret);",
+									"",
+									"pm.test(\"Status test\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userSecretProvider\": \"google\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/keys",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys"
+							]
+						},
+						"description": "This request initializes metadata for a new encryption key.\nThe request parameters must contain the user's preferred recovery method/secret provider (such as a social sign-in via OAuth).\nThe response will contain a new `id` to identify the key, and a `clientSecret` used to generate or recover the key.\n\n**Important**: both the `id` and `clientSecret` **must** be stored alongside a user's account and are required for both generation and recovery of the user's key.\nThe `clientSecret` is your share of the user's encryption key and should be considered at least as sensitive as the user's password hash - if you lose this token, the user's encryption key will be irretrievably lost."
+					},
+					"response": []
+				},
+				{
+					"name": "Create a transaction to generate a new key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status test\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clientSecret\": \"{{clientSecret}}\",\n  \"clientReturnUrl\": \"https://example.com/generate\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/keys/{{keyId}}/transactions/generate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys",
+								"{{keyId}}",
+								"transactions",
+								"generate"
+							]
+						},
+						"description": "This request creates a \"key-generation transaction\", which is required to securely communicate with the Bunkyr API when generating keys for the first time.\nThe request parameters must contain a `keyId`, the key-specific `clientSecret` (the `id` and `clientSecret` returned from initializing a new key), and a `clientReturnUrl` for the user to be redirected back to with a key token.\nThe response parameters will contain an `id` for the transaction, and a `userPromptUrl` to forward end users to in order to provide their share of the key generation information.\n\nThe `clientReturnUrl` may be any valid URL; this is the endpoint on **your application** to which Bunkyr will redirect the user after they complete the transaction.\n\nYou should store the transaction's `id` for correlation when the user is redirected back to you with a key token.\nA transaction's `userPromptUrl` should be considered extremely sensitive and only be stored until the end user has been redirected, then securely deleted."
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve a key's contents",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// replace this URL with the one from your browser",
+									"keyTokenUrl = \"https://example.com/generate?transactionId=aabbccdd11223344&keyToken=zzzyyyxxxwww999888777666\"",
+									"",
+									"",
+									"const sdk = require('postman-collection');",
+									"const apiUrl = new sdk.Url(keyTokenUrl);",
+									"var query = {};",
+									"apiUrl.query.all().forEach((param) => { query[param.key] = param.value});",
+									"",
+									"pm.collectionVariables.set(\"keyToken\", query[\"keyToken\"]);",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/keys/{{keyId}}?keyToken={{keyToken}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys",
+								"{{keyId}}"
+							],
+							"query": [
+								{
+									"key": "keyToken",
+									"value": "{{keyToken}}",
+									"description": "(Required) One-time-use token representing this recovery key which must be provided back to Bunkyr exactly as-is when retrieving a key's contents"
+								}
+							]
+						},
+						"description": "This request exchanges a one-time-use key token for the user's plaintext recovery key.\nThe request parameters must contain a `keyId` (the `id` returned from initializing a new key) and `keyToken` (the `keyToken` parameter returned via the user's browser).\nThe response parameters will contain the user's 128-bit plaintext `recoveryKey`, base-36 encoded.\n\nThe `keyToken` will not be used again and must be securely deleted after completing this request, as it should be considered extremely sensitive.\nThe `recoveryKey` must never be stored - it should instead be used to set up the user's recovery information (if generating a key for the first time) or to restore access to the user's account.\nIn either case, the `recoveryKey` must be used and then immediately and securely deleted.\n\nBunkyr decrypts the `keyToken` into the user's `recoveryKey`, and then immediately and securely deletes the plaintext key and all information associated with this transaction after returning it via this endpoint."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Recover key",
+			"item": [
+				{
+					"name": "Create a transaction to recover an existing key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status test\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clientSecret\": \"{{clientSecret}}\",\n  \"clientReturnUrl\": \"https://example.com/recover\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/keys/{{keyId}}/transactions/recover",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys",
+								"{{keyId}}",
+								"transactions",
+								"recover"
+							]
+						},
+						"description": "This request creates a \"key-recovery transaction\", which is required to securely communicate with the Bunkyr API when recovering keys.\nThe request parameters must contain a `keyId`, the key-specific `clientSecret` (the `id` and `clientSecret` returned from initializing a new key), and a `clientReturnUrl` for the user to be redirected back to with a key token.\nThe response parameters will contain an `id` for the transaction, and a `userPromptUrl` to forward end users to in order to provide their share of the key generation information.\n\nThe `clientReturnUrl` may be any valid URL; this is the endpoint on **your application** to which Bunkyr will redirect the user after they complete the transaction.\n\nYou should store the transaction's `id` for correlation when the user is redirected back to you with a key token.\nA transaction's `userPromptUrl` should be considered extremely sensitive and only be stored until the end user has been redirected, then securely deleted."
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve a key's contents",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// replace this URL with the one from your browser",
+									"keyTokenUrl = \"https://example.com/recover?transactionId=aabbccdd11223344&keyToken=zzzyyyxxxwww999888777666\"",
+									"",
+									"",
+									"const sdk = require('postman-collection');",
+									"const apiUrl = new sdk.Url(keyTokenUrl);",
+									"var query = {};",
+									"apiUrl.query.all().forEach((param) => { query[param.key] = param.value});",
+									"",
+									"pm.collectionVariables.set(\"keyToken\", query[\"keyToken\"]);",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/keys/{{keyId}}?keyToken={{keyToken}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys",
+								"{{keyId}}"
+							],
+							"query": [
+								{
+									"key": "keyToken",
+									"value": "{{keyToken}}",
+									"description": "(Required) One-time-use token representing this recovery key which must be provided back to Bunkyr exactly as-is when retrieving a key's contents"
+								}
+							]
+						},
+						"description": "This request exchanges a one-time-use key token for the user's plaintext recovery key.\nThe request parameters must contain a `keyId` (the `id` returned from initializing a new key) and `keyToken` (the `keyToken` parameter returned via the user's browser).\nThe response parameters will contain the user's 128-bit plaintext `recoveryKey`, base-36 encoded.\n\nThe `keyToken` will not be used again and must be securely deleted after completing this request, as it should be considered extremely sensitive.\nThe `recoveryKey` must never be stored - it should instead be used to set up the user's recovery information (if generating a key for the first time) or to restore access to the user's account.\nIn either case, the `recoveryKey` must be used and then immediately and securely deleted.\n\nBunkyr decrypts the `keyToken` into the user's `recoveryKey`, and then immediately and securely deletes the plaintext key and all information associated with this transaction after returning it via this endpoint."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "value",
+				"value": "YOUR_API_KEY_HERE",
+				"type": "string"
+			},
+			{
+				"key": "key",
+				"value": "X-Api-Key",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://api.bunkyr.com",
+			"type": "string"
+		},
+		{
+			"key": "keyId",
+			"value": ""
+		},
+		{
+			"key": "clientSecret",
+			"value": ""
+		},
+		{
+			"key": "keyToken",
+			"value": ""
+		}
+	]
+}

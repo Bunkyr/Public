@@ -1,0 +1,403 @@
+openapi: 3.0.0
+servers:
+  - url: 'https://api.bunkyr.com'
+    description: Bunkyr API
+info:
+  description: >-
+    The Bunkyr Key Generation API can be used for generation of keys and
+    recovery of existing keys.
+  version: Pre-Release
+  title: Bunkyr Key Generation API
+  termsOfService: ''
+  contact:
+    email: contact@bunkyr.com
+    url: 'https://bunkyr.com'
+paths:
+  /keys:
+    post:
+      summary: Initialize a new key
+      description: >-
+        This request initializes metadata for a new encryption key.
+
+        The request parameters must contain the user's preferred recovery
+        method/secret provider (such as a social sign-in via OAuth).
+
+        The response will contain a new `id` to identify the key, and a
+        `clientSecret` used to
+        [generate](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions~1generate/post)
+        or
+        [recover](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions~1recover/post)
+        the key.
+
+
+        **Important**: both the `id` and `clientSecret` **must** be stored
+        alongside a user's account and are required for both
+        [generation](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions~1generate/post)
+        and
+        [recovery](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions~1recover/post)
+        of the user's key.
+
+        The `clientSecret` is your share of the user's encryption key and should
+        be considered at least as sensitive as the user's password hash - if you
+        lose this token, the user's encryption key will be irretrievably lost.
+      parameters:
+        - $ref: '#/components/parameters/apiKey'
+      operationId: ''
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: >-
+                      Unique identifier for the newly initialized key, used as a
+                      request parameter in invoking subsequent endpoints
+                  clientSecret:
+                    type: string
+                    description: >-
+                      Your share of the user's encryption key which must be
+                      provided back to Bunkyr exactly as-is each time you
+                      generate or recover the corresponding key
+              examples: {}
+        '400':
+          description: >-
+            Bad Request: missing, invalid, or expired parameter (Bunkyr API key,
+            request parameter, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userSecretProvider:
+                  type: string
+                  enum:
+                    - google
+                  description: >-
+                    The source of the user's share of their recovery key, such
+                    as an OAuth/social sign-in provider
+            examples: {}
+  '/keys/{keyId}/transactions/generate':
+    post:
+      summary: Create a transaction to generate a new key
+      description: >-
+        This request creates a "key-generation transaction", which is required
+        to securely communicate with the Bunkyr API when generating keys for the
+        first time.
+
+        The request parameters must contain a `keyId`, the key-specific
+        `clientSecret` (the `id` and `clientSecret` returned from [initializing
+        a new key](KeyGenerationAPI.yaml/paths/~1keys/post)), and a
+        `clientReturnUrl` for the user to be redirected back to with a key
+        token.
+
+        The response parameters will contain an `id` for the transaction, and a
+        `userPromptUrl` to forward end users to in order to provide their share
+        of the key generation information.
+
+
+        The `clientReturnUrl` may be any valid URL; this is the endpoint on
+        **your application** to which Bunkyr will redirect the user after they
+        complete the transaction.
+
+
+        You should store the transaction's `id` for correlation when [the user
+        is redirected back to you with a key
+        token](KeyGenerationAPI.yaml/paths/~1your-key-return-endpoint/get).
+
+        A transaction's `userPromptUrl` should be considered extremely sensitive
+        and only be stored until the end user has been redirected, then securely
+        deleted.
+      parameters:
+        - $ref: '#/components/parameters/apiKey'
+      operationId: ''
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: >-
+                      Unique identifier of this transaction, used to correlate
+                      between invocations of subsequent endpoints
+                  userPromptUrl:
+                    type: string
+                    description: >-
+                      One-time-use URL that your application should redirect the
+                      end user to in order to provide their key-generation share
+        '400':
+          description: >-
+            Bad Request: missing, invalid, or expired parameter (Bunkyr API key,
+            request parameter, etc.)
+        '404':
+          description: 'Not Found: no key with ID `keyId` exists'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientSecret:
+                  type: string
+                  description: >-
+                    Your share of the user's recovery key, provided back to
+                    Bunkyr exactly as initially generated by previous endpoints
+                clientReturnUrl:
+                  type: string
+                  description: >-
+                    URL the end user should be returned to by Bunkyr after
+                    completing key generation or recovery
+            examples: {}
+        description: ''
+    parameters:
+      - $ref: '#/components/parameters/keyId'
+  '/keys/{keyId}/transactions/recover':
+    post:
+      summary: Create a transaction to recover an existing key
+      description: >-
+        This request creates a "key-recovery transaction", which is required to
+        securely communicate with the Bunkyr API when recovering keys.
+
+        The request parameters must contain a `keyId`, the key-specific
+        `clientSecret` (the `id` and `clientSecret` returned from [initializing
+        a new key](KeyGenerationAPI.yaml/paths/~1keys/post)), and a
+        `clientReturnUrl` for the user to be redirected back to with a key
+        token.
+
+        The response parameters will contain an `id` for the transaction, and a
+        `userPromptUrl` to forward end users to in order to provide their share
+        of the key generation information.
+
+
+        The `clientReturnUrl` may be any valid URL; this is the endpoint on
+        **your application** to which Bunkyr will redirect the user after they
+        complete the transaction.
+
+
+        You should store the transaction's `id` for correlation when [the user
+        is redirected back to you with a key
+        token](KeyGenerationAPI.yaml/paths/~1your-key-return-endpoint/get).
+
+        A transaction's `userPromptUrl` should be considered extremely sensitive
+        and only be stored until the end user has been redirected, then securely
+        deleted.
+      parameters:
+        - $ref: '#/components/parameters/apiKey'
+      operationId: ''
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: >-
+                      Unique identifier of this transaction, used to correlate
+                      between invocations of subsequent endpoints
+                  userPromptUrl:
+                    type: string
+                    description: >-
+                      One-time-use URL that your application should redirect the
+                      end user to in order to provide their key-generation share
+        '400':
+          description: >-
+            Bad Request: missing, invalid, or expired parameter (Bunkyr API key,
+            request parameter, etc.)
+        '404':
+          description: 'Not Found: no key with ID `keyId` exists'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientSecret:
+                  type: string
+                  description: >-
+                    Your share of the user's recovery key, provided back to
+                    Bunkyr exactly as initially generated by previous endpoints
+                clientReturnUrl:
+                  type: string
+                  description: >-
+                    URL the end user should be returned to by Bunkyr after
+                    completing key generation or recovery
+            examples: {}
+        description: ''
+    parameters:
+      - $ref: '#/components/parameters/keyId'
+  /your-key-return-endpoint:
+    get:
+      summary: Return key token
+      description: >-
+        This request returns a one-time-use key token to your application after
+        the user has completed
+        [key-generation](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1generate/get)
+        or
+        [key-recovery](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1recover/get).
+
+        The request parameters will contain a `transactionId` (the same `id`
+        parameter initially returned from [creating a
+        transaction](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions/post))
+        and `keyToken` that can be exchanged for the user's key.
+
+
+        This request is performed by the user's browser via Bunkyr redirecting
+        them to the `clientReturnUrl` provided [when creating a
+        transaction](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}~1transactions/post).
+
+        The original `transactionId` is provided as a query parameter to allow
+        you to correlate between the asynchronous requests made to the Bunkyr
+        API and by the end user's browser.
+
+        The `keyToken` is an encrypted representation of the user's recovery
+        key, created by combining your `clientSecret`, the user's social sign-in
+        token, and Bunkyr's secure cryptographic hardware.
+
+
+        The raw recovery key is not returned in this request for security
+        reasons, as the actual key would then be present in the user's browser
+        history via query parameters. Instead, the plaintext recovery key can be
+        [retrieved by exchanging the one-time-use
+        `keyToken`](KeyGenerationAPI.yaml/paths/~1keys~1{keyId}/get).
+
+
+        After this request is completed, the `transactionId` is invalidated and
+        may be deleted.
+
+        The `keyToken` should be considered extremely sensitive and only stored
+        until invoking the next API endpoint, then securely deleted.
+      servers:
+        - url: 'https://example.com'
+        - description: Override base path for customer endpoint return
+      parameters:
+        - $ref: '#/components/parameters/transactionId'
+        - $ref: '#/components/parameters/keyToken'
+      operationId: ''
+      responses:
+        default:
+          description: >-
+            N/A: this is a request made by the user's browser to your
+            application
+    parameters: []
+  '/keys/{keyId}':
+    get:
+      summary: Retrieve a key's contents
+      description: >-
+        This request exchanges a one-time-use key token for the user's plaintext
+        recovery key.
+
+        The request parameters must contain a `keyId` (the `id` returned from
+        [initializing a new key](KeyGenerationAPI.yaml/paths/~1keys/post)) and
+        `keyToken` (the `keyToken` parameter returned [via the user's
+        browser](KeyGenerationAPI.yaml/paths/~1your-key-return-endpoint/get)).
+
+        The response parameters will contain the user's 128-bit plaintext
+        `recoveryKey`, base-36 encoded.
+
+
+        The `keyToken` will not be used again and must be securely deleted after
+        completing this request, as it should be considered extremely sensitive.
+
+        The `recoveryKey` must never be stored - it should instead be used to
+        set up the user's recovery information (if generating a key for the
+        first time) or to restore access to the user's account.
+
+        In either case, the `recoveryKey` must be used and then immediately and
+        securely deleted.
+
+
+        Bunkyr decrypts the `keyToken` into the user's `recoveryKey`, and then
+        immediately and securely deletes the plaintext key and all information
+        associated with this transaction after returning it via this endpoint.
+      parameters:
+        - name: keyToken
+          $ref: '#/components/parameters/keyToken'
+        - name: X-Api-Key
+          $ref: '#/components/parameters/apiKey'
+      operationId: ''
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recoveryKey:
+                    type: string
+                    description: >-
+                      128-bit plaintext recovery key (base-36 encoded) generated
+                      by Bunkyr which is identified by this unique `keyId`
+        '400':
+          description: >-
+            Bad Request: missing, invalid, or expired parameter (Bunkyr API key,
+            request parameter, etc.)
+        '404':
+          description: 'Not Found: no key with ID `keyId` exists'
+    parameters:
+      - $ref: '#/components/parameters/keyId'
+components:
+  schemas: {}
+  requestBodies: {}
+  securitySchemes:
+    api_key:
+      type: apiKey
+      name: X-Api-Key
+      in: header
+  parameters:
+    keyToken:
+      name: keyToken
+      in: query
+      required: true
+      description: >-
+        One-time-use token representing this recovery key which must be provided
+        back to Bunkyr exactly as-is when retrieving a key's contents
+      schema:
+        type: string
+    apiKey:
+      name: X-Api-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Bunkyr-provided API key
+    keyId:
+      name: keyId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Unique identifier for the user's recovery key
+    transactionId:
+      name: transactionId
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Unique identifier for this key-generation/key-recovery transaction
+    transactionToken:
+      name: transactionToken
+      in: query
+      required: true
+      schema:
+        type: string
+      description: >-
+        One-time-use token representing this transaction which must be provided
+        back to Bunkyr exactly as-is when invoking subsequent endpoints
+  links: {}
+  callbacks: {}
+security: []
